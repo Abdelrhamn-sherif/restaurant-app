@@ -1,8 +1,12 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import useSWR from 'swr';
 import toast, { Toaster } from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
+import { 
+  LayoutDashboard, UtensilsCrossed, ChefHat, CheckCircle2, 
+  Trash2, Plus, Users, Clock, CreditCard, ChevronRight, AlertCircle, RefreshCcw
+} from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -10,16 +14,36 @@ export default function AdminDashboard() {
   const { data: orders, mutate: mutateOrders } = useSWR('/api/orders', fetcher, { refreshInterval: 3000 });
   const { data: tables, mutate: mutateTables } = useSWR('/api/tables', fetcher, { refreshInterval: 5000 });
   
-  const [previousOrderCount, setPreviousOrderCount] = useState(0);
   const [newTableName, setNewTableName] = useState('');
-  const [newTableSeats, setNewTableSeats] = useState(''); // NEW: Seats state
+  const [newTableSeats, setNewTableSeats] = useState('');
+
+  // Use a ref to track specific order IDs instead of a simple counter
+  const seenOrderIds = useRef<Set<string> | null>(null);
 
   useEffect(() => {
-    if (orders && orders.length > previousOrderCount) {
-      toast('New Order Received!', { icon: '🔔', style: { background: '#333', color: '#fff' } });
-      setPreviousOrderCount(orders.length);
+    if (!orders) return;
+
+    const currentIds = new Set<string>(orders.map((o: any) => o.id));
+
+    // 1. Initial page load: silently memorize existing orders, do not show a toast
+    if (seenOrderIds.current === null) {
+      seenOrderIds.current = currentIds;
+      return;
     }
-  }, [orders, previousOrderCount]);
+
+    // 2. Subsequent polls: check if there are any new IDs we haven't seen yet
+    const hasNewOrder = orders.some((o: any) => !seenOrderIds.current!.has(o.id));
+
+    if (hasNewOrder) {
+      toast.success('New Order Received!', { 
+        icon: '🔔', 
+        style: { borderRadius: '1rem', background: '#f97316', color: '#fff', fontWeight: 'bold' } 
+      });
+    }
+
+    // 3. Always update the memorized list
+    seenOrderIds.current = currentIds;
+  }, [orders]);
 
   const updateOrderStatus = async (orderId: string, status: string) => {
     await fetch('/api/orders', { method: 'PUT', body: JSON.stringify({ orderId, status }) });
@@ -29,7 +53,7 @@ export default function AdminDashboard() {
   const clearSession = async (tableId: string) => {
     await fetch('/api/tables', { method: 'PUT', body: JSON.stringify({ tableId, action: 'clear' }) });
     mutateTables();
-    toast.success(`Table cleared`);
+    toast.success('Table cleared & ready for next customer');
   };
 
   const handleAddTable = async (e: React.FormEvent) => {
@@ -43,112 +67,211 @@ export default function AdminDashboard() {
     setNewTableName('');
     setNewTableSeats('');
     mutateTables();
-    toast.success('Table added!');
+    toast.success('Table added successfully!');
   };
 
   const removeTable = async (tableId: string) => {
     if (!window.confirm('Remove this table completely?')) return;
     await fetch(`/api/tables?id=${tableId}`, { method: 'DELETE' });
     mutateTables();
-    toast.success('Table removed!');
+    toast.success('Table removed');
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-900 selection:bg-orange-100 selection:text-orange-900">
       <Toaster position="top-right" />
-      <h1 className="text-3xl font-bold mb-8">Restaurant Dashboard</h1>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      
+      <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* Active Orders Column (unchanged) */}
-        <div className="bg-gray-50 p-6 rounded-xl">
-          <h2 className="text-xl font-semibold mb-4 border-b pb-2">Active Orders</h2>
-          <div className="space-y-4">
-            {orders?.filter((o: any) => o.status !== 'completed').length === 0 && (
-              <p className="text-gray-500 text-center py-8">No active orders right now.</p>
-            )}
-            
-            {orders?.filter((o: any) => o.status !== 'completed').map((order: any) => (
-              <div key={order.id} className={`p-4 rounded-lg shadow border-l-4 ${order.status === 'paid' ? 'border-green-500 bg-green-50' : order.status === 'in-progress' ? 'border-yellow-500 bg-yellow-50' : 'border-blue-500 bg-white'}`}>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-bold text-lg">Table {tables?.find((t:any) => t.id === order.tableId)?.name || order.tableId}</span>
-                  <span className={`px-3 py-1 rounded text-sm font-medium ${order.status === 'paid' ? 'bg-green-200 text-green-800' : order.status === 'in-progress' ? 'bg-yellow-200 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
-                    {order.status.toUpperCase()}
-                  </span>
-                </div>
-                <ul className="text-sm text-gray-700 mb-4 font-medium">
-                  {order.items.map((item: any, i: number) => (
-                    <li key={i} className="flex justify-between">
-                      <span>{item.quantity}x {item.name}</span>
-                      <span>${(item.price * item.quantity).toFixed(2)}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex justify-between items-center border-t pt-3 mt-3">
-                  <span className="font-bold">Total: ${order.total.toFixed(2)}</span>
-                  {order.status === 'pending' && <button onClick={() => updateOrderStatus(order.id, 'in-progress')} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">Confirm & Start</button>}
-                  {order.status === 'paid' && <button onClick={() => updateOrderStatus(order.id, 'completed')} className="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-900">Clear Order</button>}
-                </div>
+        {/* --- HEADER --- */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-[2rem] shadow-[0_2px_20px_rgb(0,0,0,0.02)] border border-slate-100">
+          <div>
+            <h1 className="text-3xl font-extrabold flex items-center gap-3 text-slate-900">
+              <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center">
+                <LayoutDashboard className="text-orange-500 w-6 h-6"/> 
               </div>
-            ))}
+              Restaurant Dashboard
+            </h1>
+            <p className="text-slate-500 font-medium mt-2 ml-15">Manage your orders and dining room in real-time.</p>
           </div>
+          <a 
+            href="/admin/menu" 
+            className="mt-6 md:mt-0 flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3.5 rounded-2xl font-bold transition-all active:scale-95 [Webkit-tap-highlight-color:transparent]"
+          >
+            <UtensilsCrossed className="w-5 h-5"/> Manage Menu Items <ChevronRight className="w-4 h-4 text-slate-400"/>
+          </a>
         </div>
 
-        {/* Table Management Column */}
-        <div className="bg-gray-50 p-6 rounded-xl">
-          <div className="flex justify-between items-center mb-4 border-b pb-2">
-            <h2 className="text-xl font-semibold">Tables & Static QR Codes</h2>
-            <a href="/admin/menu" className="text-blue-600 text-sm hover:underline font-medium">Manage Menu &rarr;</a>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          
+          {/* --- ACTIVE ORDERS COLUMN --- */}
+          <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_2px_20px_rgb(0,0,0,0.02)] border border-slate-100 flex flex-col h-full">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-extrabold flex items-center gap-2">
+                <ChefHat className="text-orange-500 w-6 h-6"/> Active Orders
+              </h2>
+              <div className="text-xs font-bold bg-slate-100 text-slate-500 px-3 py-1 rounded-full flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span> Live
+              </div>
+            </div>
+
+            <div className="space-y-4 flex-1">
+              {orders?.filter((o: any) => o.status !== 'completed').length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center py-16 text-slate-400">
+                  <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                    <CheckCircle2 className="w-10 h-10 text-slate-300"/>
+                  </div>
+                  <p className="font-medium text-lg">All caught up!</p>
+                  <p className="text-sm">No active orders right now.</p>
+                </div>
+              )}
+              
+              {orders?.filter((o: any) => o.status !== 'completed').map((order: any) => (
+                <div key={order.id} className={`p-5 rounded-2xl border transition-all ${
+                  order.status === 'paid' ? 'border-emerald-200 bg-emerald-50/50' : 
+                  order.status === 'in-progress' ? 'border-orange-200 bg-orange-50/50' : 
+                  'border-amber-200 bg-amber-50/50'
+                }`}>
+                  <div className="flex justify-between items-start mb-4 border-b border-black/5 pb-4">
+                    <div>
+                      <span className="font-extrabold text-xl flex items-center gap-2">
+                        {tables?.find((t:any) => t.id === order.tableId)?.name || `Table ${order.tableId}`}
+                      </span>
+                      <span className="text-xs font-bold text-slate-500 flex items-center gap-1 mt-1">
+                        <Clock className="w-3 h-3"/> {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <span className={`px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5 ${
+                      order.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 
+                      order.status === 'in-progress' ? 'bg-orange-100 text-orange-700' : 
+                      'bg-amber-100 text-amber-700'
+                    }`}>
+                      {order.status === 'paid' ? <CreditCard className="w-3.5 h-3.5"/> : 
+                       order.status === 'in-progress' ? <ChefHat className="w-3.5 h-3.5"/> : 
+                       <AlertCircle className="w-3.5 h-3.5"/>}
+                      {order.status}
+                    </span>
+                  </div>
+                  
+                  <ul className="text-sm text-slate-700 mb-5 font-medium space-y-2">
+                    {order.items.map((item: any, i: number) => (
+                      <li key={i} className="flex justify-between items-center bg-white/60 p-2 rounded-lg">
+                        <span className="flex items-center gap-2">
+                          <span className="bg-slate-200 text-slate-700 text-xs font-bold px-2 py-0.5 rounded-md">{item.quantity}x</span> 
+                          {item.name}
+                        </span>
+                        <span className="font-bold text-slate-400">${(item.price * item.quantity).toFixed(2)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="font-extrabold text-lg">${order.total.toFixed(2)}</span>
+                    
+                    {order.status === 'pending' && (
+                      <button 
+                        onClick={() => updateOrderStatus(order.id, 'in-progress')} 
+                        className="bg-orange-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-orange-500/30 hover:bg-orange-600 active:scale-95 transition-all [Webkit-tap-highlight-color:transparent]"
+                      >
+                        Confirm & Cook
+                      </button>
+                    )}
+                    {order.status === 'paid' && (
+                      <button 
+                        onClick={() => updateOrderStatus(order.id, 'completed')} 
+                        className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/30 hover:bg-emerald-700 active:scale-95 transition-all flex items-center gap-2 [Webkit-tap-highlight-color:transparent]"
+                      >
+                        <CheckCircle2 className="w-4 h-4"/> Clear Order
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Updated Table Form with Seats */}
-          <form onSubmit={handleAddTable} className="flex gap-2 mb-6">
-            <input 
-              type="text" 
-              placeholder="Name (e.g. T-1)" 
-              className="flex-[2] p-2 border rounded-lg"
-              value={newTableName} onChange={(e) => setNewTableName(e.target.value)}
-            />
-            <input 
-              type="number" 
-              placeholder="Seats" 
-              className="flex-1 p-2 border rounded-lg"
-              value={newTableSeats} onChange={(e) => setNewTableSeats(e.target.value)}
-            />
-            <button type="submit" className="bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800">Add</button>
-          </form>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {tables?.map((table: any) => {
-              // STATIC URL: No longer contains a session token!
-              const menuUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/menu/${table.id}`;
+          {/* --- TABLE MANAGEMENT COLUMN --- */}
+          <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_2px_20px_rgb(0,0,0,0.02)] border border-slate-100 flex flex-col h-full">
+            <h2 className="text-xl font-extrabold flex items-center gap-2 mb-6">
+              <Users className="text-blue-500 w-6 h-6"/> Dining Room
+            </h2>
 
-              return (
-                <div key={table.id} className="bg-white p-4 rounded-lg shadow text-center flex flex-col items-center relative">
-                  <button onClick={() => removeTable(table.id)} className="absolute top-2 right-2 text-gray-300 hover:text-red-500">✖</button>
-                  
-                  <h3 className="font-bold text-lg leading-tight">{table.name}</h3>
-                  <p className="text-xs text-gray-500 mb-3">{table.seats} Seats</p>
-                  
-                  <div className="bg-white p-2 rounded-xl shadow-inner mb-3 border">
-                    <QRCodeSVG value={menuUrl} size={120} />
+            {/* Add Table Form */}
+            <form onSubmit={handleAddTable} className="flex gap-2 mb-8 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+              <input 
+                type="text" 
+                placeholder="Table Name (e.g. T-1)" 
+                className="flex-[2] bg-transparent p-3 outline-none font-medium text-slate-900 placeholder:text-slate-400"
+                value={newTableName} onChange={(e) => setNewTableName(e.target.value)}
+              />
+              <div className="w-px bg-slate-200 my-2"></div>
+              <input 
+                type="number" 
+                placeholder="Seats" 
+                className="flex-[1] bg-transparent p-3 outline-none font-medium text-slate-900 placeholder:text-slate-400 w-20"
+                value={newTableSeats} onChange={(e) => setNewTableSeats(e.target.value)}
+              />
+              <button 
+                type="submit" 
+                className="bg-slate-900 text-white px-5 rounded-xl font-bold hover:bg-slate-800 flex items-center gap-1 active:scale-95 transition-all [Webkit-tap-highlight-color:transparent]"
+              >
+                <Plus className="w-4 h-4"/> Add
+              </button>
+            </form>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {tables?.map((table: any) => {
+                const menuUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/menu/${table.id}`;
+
+                return (
+                  <div key={table.id} className="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-center flex flex-col items-center relative group transition-all hover:shadow-md">
+                    
+                    <button 
+                      onClick={() => removeTable(table.id)} 
+                      className="absolute top-3 right-3 text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all [Webkit-tap-highlight-color:transparent]"
+                      title="Remove Table"
+                    >
+                      <Trash2 className="w-4 h-4"/>
+                    </button>
+                    
+                    <h3 className="font-extrabold text-xl text-slate-900 mb-1">{table.name}</h3>
+                    <p className="text-xs text-slate-500 font-medium mb-4 flex items-center justify-center gap-1">
+                      <Users className="w-3 h-3"/> {table.seats} Seats
+                    </p>
+                    
+                    <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-4 group-hover:scale-105 transition-transform">
+                      <QRCodeSVG value={menuUrl} size={110} />
+                    </div>
+
+                    {table.sessionToken ? (
+                      <div className="w-full mt-auto">
+                        <p className="text-[10px] text-rose-600 font-extrabold mb-2 uppercase tracking-widest flex items-center justify-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Occupied
+                        </p>
+                        <button 
+                          onClick={() => clearSession(table.id)} 
+                          className="w-full bg-white text-rose-600 py-2.5 rounded-xl text-sm font-bold border border-rose-200 hover:bg-rose-50 active:scale-95 transition-all flex items-center justify-center gap-2 [Webkit-tap-highlight-color:transparent]"
+                        >
+                          <RefreshCcw className="w-4 h-4"/> Clear Table
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-full mt-auto">
+                         <p className="text-[10px] text-emerald-600 font-extrabold mb-2 uppercase tracking-widest flex items-center justify-center gap-1 py-2.5">
+                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Available
+                         </p>
+                      </div>
+                    )}
                   </div>
+                );
+              })}
 
-                  {table.sessionToken ? (
-                    <div className="w-full">
-                      <p className="text-xs text-red-600 font-bold mb-2 uppercase tracking-wider">Occupied</p>
-                      <button onClick={() => clearSession(table.id)} className="w-full bg-red-50 text-red-700 py-2 rounded text-sm font-semibold hover:bg-red-100 border border-red-200">
-                        Clear Table
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-full">
-                       <p className="text-xs text-green-600 font-bold mb-2 uppercase tracking-wider">Available</p>
-                    </div>
-                  )}
+              {tables?.length === 0 && (
+                <div className="col-span-1 sm:col-span-2 text-center py-10 text-slate-400">
+                  <p>No tables configured yet.</p>
                 </div>
-              );
-            })}
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -1,13 +1,21 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';
 import useSWR from 'swr';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-// We receive the safely extracted tableId directly as a prop!
-export default function MenuClient({ tableId }: { tableId: string }) {
-  const { data: table, mutate: mutateTable } = useSWR(`/api/tables?id=${tableId}`, fetcher, { refreshInterval: 3000 });
+export default function MenuClient() {
+  const params = useParams();
+  const tableId = params?.tableId as string;
+
+  // SWR conditionally fetches only when tableId is ready
+  const { data: table, mutate: mutateTable } = useSWR(
+    tableId ? `/api/tables?id=${tableId}` : null, 
+    fetcher, 
+    { refreshInterval: 3000 }
+  );
   const { data: menuItems } = useSWR('/api/menu', fetcher);
   
   const [localSessionToken, setLocalSessionToken] = useState<string | null>(null);
@@ -16,6 +24,7 @@ export default function MenuClient({ tableId }: { tableId: string }) {
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!tableId) return;
     const savedToken = localStorage.getItem(`session_${tableId}`);
     if (savedToken) setLocalSessionToken(savedToken);
   }, [tableId]);
@@ -75,7 +84,8 @@ export default function MenuClient({ tableId }: { tableId: string }) {
 
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  if (!table || !menuItems) return <div className="p-8 text-center text-gray-500">Loading...</div>;
+  // Still loading data from the database
+  if (!table || !menuItems) return null;
 
   // VIEW 1: Table is empty, customer needs to check in
   if (!table.sessionToken) {

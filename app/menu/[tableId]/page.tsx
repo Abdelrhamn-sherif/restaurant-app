@@ -1,13 +1,17 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react'; // <-- IMPORT 'use' HERE
 import toast, { Toaster } from 'react-hot-toast';
 import useSWR from 'swr';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export default function CustomerMenu({ params }: { params: { tableId: string } }) {
-  // Fetch table data to check its occupied status
-  const { data: table, mutate: mutateTable } = useSWR(`/api/tables?id=${params.tableId}`, fetcher, { refreshInterval: 3000 });
+// Update the type to indicate params is a Promise
+export default function CustomerMenu({ params }: { params: Promise<{ tableId: string }> }) {
+  // UNWRAP THE PARAMS HERE
+  const { tableId } = use(params);
+  
+  // Now we use the unwrapped `tableId` everywhere instead of `params.tableId`
+  const { data: table, mutate: mutateTable } = useSWR(`/api/tables?id=${tableId}`, fetcher, { refreshInterval: 3000 });
   const { data: menuItems } = useSWR('/api/menu', fetcher);
   
   const [localSessionToken, setLocalSessionToken] = useState<string | null>(null);
@@ -15,31 +19,28 @@ export default function CustomerMenu({ params }: { params: { tableId: string } }
   const [orderStatus, setOrderStatus] = useState<'ordering' | 'placed' | 'paid'>('ordering');
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
 
-  // Check browser storage on load
   useEffect(() => {
-    const savedToken = localStorage.getItem(`session_${params.tableId}`);
+    const savedToken = localStorage.getItem(`session_${tableId}`);
     if (savedToken) setLocalSessionToken(savedToken);
-  }, [params.tableId]);
+  }, [tableId]);
 
-  // --- CHECK-IN LOGIC ---
   const handleCheckIn = async () => {
     const res = await fetch('/api/tables', {
       method: 'PUT',
-      body: JSON.stringify({ tableId: params.tableId, action: 'checkin' })
+      body: JSON.stringify({ tableId, action: 'checkin' })
     });
     
     if (res.ok) {
       const data = await res.json();
-      localStorage.setItem(`session_${params.tableId}`, data.sessionToken);
+      localStorage.setItem(`session_${tableId}`, data.sessionToken);
       setLocalSessionToken(data.sessionToken);
-      mutateTable(); // Refresh table data
+      mutateTable(); 
       toast.success('You are checked in!');
     } else {
       toast.error('Table is already occupied!');
     }
   };
 
-  // --- ORDERING LOGIC ---
   const addToCart = (item: any) => {
     if (item.isSoldOut) return;
     setCart((prev) => [...prev, { ...item, quantity: 1 }]);
@@ -50,7 +51,7 @@ export default function CustomerMenu({ params }: { params: { tableId: string } }
     if (cart.length === 0) return toast.error('Cart empty');
     const res = await fetch('/api/orders', {
       method: 'POST',
-      body: JSON.stringify({ tableId: params.tableId, items: cart, sessionToken: localSessionToken }),
+      body: JSON.stringify({ tableId, items: cart, sessionToken: localSessionToken }),
     });
     
     if (res.ok) {
@@ -67,7 +68,7 @@ export default function CustomerMenu({ params }: { params: { tableId: string } }
     if (!currentOrderId) return;
     const res = await fetch('/api/pay', {
       method: 'POST',
-      body: JSON.stringify({ orderId: currentOrderId, tableId: params.tableId, sessionToken: localSessionToken }),
+      body: JSON.stringify({ orderId: currentOrderId, tableId, sessionToken: localSessionToken }),
     });
 
     if (res.ok) {
@@ -80,7 +81,7 @@ export default function CustomerMenu({ params }: { params: { tableId: string } }
 
   if (!table || !menuItems) return <div className="p-8 text-center text-gray-500">Loading...</div>;
 
-  // --- VIEW 1: Table is empty, customer needs to check in ---
+  // VIEW 1: Table is empty, customer needs to check in
   if (!table.sessionToken) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
@@ -96,7 +97,7 @@ export default function CustomerMenu({ params }: { params: { tableId: string } }
     );
   }
 
-  // --- VIEW 2: Table is occupied by someone else ---
+  // VIEW 2: Table is occupied by someone else
   if (table.sessionToken !== localSessionToken) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
@@ -108,7 +109,7 @@ export default function CustomerMenu({ params }: { params: { tableId: string } }
     );
   }
 
-  // --- VIEW 3: Customer is checked in (The Menu) ---
+  // VIEW 3: Customer is checked in (The Menu)
   return (
     <div className="max-w-md mx-auto p-4 bg-gray-50 min-h-screen pb-24">
       <Toaster position="top-center" />

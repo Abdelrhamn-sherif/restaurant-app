@@ -1,17 +1,23 @@
 'use client';
-import { useState, useEffect, use } from 'react'; // <-- IMPORT 'use' HERE
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation'; // <-- Import useParams
 import toast, { Toaster } from 'react-hot-toast';
 import useSWR from 'swr';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-// Update the type to indicate params is a Promise
-export default function CustomerMenu({ params }: { params: Promise<{ tableId: string }> }) {
-  // UNWRAP THE PARAMS HERE
-  const { tableId } = use(params);
+// Remove `params` from the function arguments entirely
+export default function CustomerMenu() {
+  // Extract tableId safely on the client side
+  const params = useParams();
+  const tableId = params.tableId as string;
   
-  // Now we use the unwrapped `tableId` everywhere instead of `params.tableId`
-  const { data: table, mutate: mutateTable } = useSWR(`/api/tables?id=${tableId}`, fetcher, { refreshInterval: 3000 });
+  // Use SWR conditionally so it doesn't fetch until tableId is ready
+  const { data: table, mutate: mutateTable } = useSWR(
+    tableId ? `/api/tables?id=${tableId}` : null, 
+    fetcher, 
+    { refreshInterval: 3000 }
+  );
   const { data: menuItems } = useSWR('/api/menu', fetcher);
   
   const [localSessionToken, setLocalSessionToken] = useState<string | null>(null);
@@ -20,6 +26,7 @@ export default function CustomerMenu({ params }: { params: Promise<{ tableId: st
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!tableId) return;
     const savedToken = localStorage.getItem(`session_${tableId}`);
     if (savedToken) setLocalSessionToken(savedToken);
   }, [tableId]);

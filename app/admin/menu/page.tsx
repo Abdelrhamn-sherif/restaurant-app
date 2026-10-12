@@ -2,213 +2,209 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import toast, { Toaster } from 'react-hot-toast';
-import { 
-  ChevronLeft, UtensilsCrossed, PlusCircle, 
-  Trash2, Tag, DollarSign, EyeOff, Eye, Search 
-} from 'lucide-react';
+import { ChevronLeft, UtensilsCrossed, PlusCircle, Trash2, Tag, DollarSign, Search, ImageIcon, AlignLeft, Layers } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function AdminMenu() {
-  const { data: menuItems, mutate } = useSWR('/api/menu', fetcher);
+  const { data: menuItems, mutate: mutateMenu } = useSWR('/api/menu', fetcher);
+  const { data: categories, mutate: mutateCategories } = useSWR('/api/categories', fetcher);
   
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [price, setPrice] = useState('');
+  const [description, setDescription] = useState('');
+  const [image, setImage] = useState('');
+  const [newCatName, setNewCatName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // NEW: State for Add-ons
+  const [addons, setAddons] = useState<{name: string, price: string}[]>([]);
+  const [addonName, setAddonName] = useState('');
+  const [addonPrice, setAddonPrice] = useState('');
+
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName) return;
+    await fetch('/api/categories', { method: 'POST', body: JSON.stringify({ name: newCatName }) });
+    setNewCatName(''); mutateCategories(); toast.success('Category added!');
+  };
+
+  const deleteCategory = async (id: string) => {
+    await fetch(`/api/categories?id=${id}`, { method: 'DELETE' });
+    mutateCategories();
+  };
+
+  const handleAddAddon = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!addonName) return toast.error('Add-on name is required');
+    setAddons([...addons, { name: addonName, price: addonPrice || '0' }]);
+    setAddonName(''); setAddonPrice('');
+  };
+
+  const removeAddon = (index: number) => {
+    setAddons(addons.filter((_, i) => i !== index));
+  };
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !category || !price) return toast.error('Fill all fields');
+    if (!name || !category || !price) return toast.error('Name, Category, and Price are required');
+
+    // Format addons for the database
+    const formattedAddons = addons.map(a => ({ name: a.name, price: parseFloat(a.price) }));
 
     await fetch('/api/menu', {
       method: 'POST',
-      body: JSON.stringify({ name, category, price }),
+      body: JSON.stringify({ name, category, price, description, image, addons: formattedAddons }),
     });
     
-    setName('');
-    setCategory('');
-    setPrice('');
-    mutate();
-    toast.success('Item added successfully!');
+    setName(''); setPrice(''); setDescription(''); setImage(''); setAddons([]);
+    mutateMenu(); toast.success('Item added successfully!');
   };
 
   const toggleSoldOut = async (item: any) => {
-    await fetch('/api/menu', {
-      method: 'PUT',
-      body: JSON.stringify({ id: item.id, isSoldOut: !item.isSoldOut }),
-    });
-    mutate();
-    toast.success(item.isSoldOut ? `${item.name} is now Available` : `${item.name} marked Sold Out`, {
-      icon: item.isSoldOut ? '✅' : '🛑'
-    });
+    await fetch('/api/menu', { method: 'PUT', body: JSON.stringify({ id: item.id, isSoldOut: !item.isSoldOut }) });
+    mutateMenu();
   };
 
-  const deleteItem = async (id: string, itemName: string) => {
-    if (!window.confirm(`Are you sure you want to delete ${itemName}?`)) return;
+  const deleteItem = async (id: string) => {
+    if (!window.confirm(`Delete this item?`)) return;
     await fetch(`/api/menu?id=${id}`, { method: 'DELETE' });
-    mutate();
-    toast.success(`${itemName} deleted`);
+    mutateMenu();
   };
 
-  // Filter items based on search
   const filteredItems = menuItems?.filter((item: any) => 
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.category.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-900 selection:bg-orange-100 selection:text-orange-900 pb-24">
-      <Toaster position="top-right" toastOptions={{ style: { borderRadius: '1rem', background: '#334155', color: '#fff' } }} />
-      
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-900 selection:bg-orange-100">
+      <Toaster position="top-right" />
       <div className="max-w-5xl mx-auto space-y-8">
         
-        {/* --- HEADER --- */}
         <div className="flex items-center gap-4">
-          <a 
-            href="/admin" 
-            className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-slate-100 hover:bg-slate-100 transition-all active:scale-95 [Webkit-tap-highlight-color:transparent]"
-          >
+          <a href="/admin" className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-slate-100 hover:bg-slate-100 transition-all active:scale-95">
             <ChevronLeft className="w-6 h-6 text-slate-600" />
           </a>
           <div>
             <h1 className="text-3xl font-extrabold text-slate-900">Manage Menu</h1>
-            <p className="text-slate-500 font-medium">Add, update, or remove dishes from your catalog.</p>
+            <p className="text-slate-500 font-medium">Add dishes, categories, and add-ons.</p>
           </div>
         </div>
 
-        {/* --- ADD ITEM CARD --- */}
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_2px_20px_rgb(0,0,0,0.02)] border border-slate-100">
-          <h2 className="text-xl font-extrabold flex items-center gap-2 mb-6 text-slate-900">
-            <PlusCircle className="text-orange-500 w-6 h-6" /> Add New Item
-          </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          <form onSubmit={handleAddItem} className="flex flex-col md:flex-row gap-4">
-            {/* Name Input */}
-            <div className="flex-[2] flex items-center bg-slate-50 border border-slate-200 rounded-2xl px-4 py-1 focus-within:border-orange-500 focus-within:ring-4 focus-within:ring-orange-500/10 transition-all">
-              <UtensilsCrossed className="w-5 h-5 text-slate-400 mr-2" />
-              <input 
-                type="text" 
-                placeholder="Item Name (e.g. Smash Burger)" 
-                className="w-full bg-transparent p-2 outline-none font-medium text-slate-900 placeholder:text-slate-400"
-                value={name} onChange={(e) => setName(e.target.value)}
-              />
+          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 lg:col-span-1 h-fit">
+            <h2 className="text-xl font-extrabold flex items-center gap-2 mb-6"><Tag className="text-blue-500 w-5 h-5" /> Categories</h2>
+            <form onSubmit={handleAddCategory} className="flex gap-2 mb-4">
+              <input type="text" placeholder="New Category" className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none font-medium text-sm" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} />
+              <button type="submit" className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold hover:bg-slate-800 text-sm"><PlusCircle className="w-4 h-4"/></button>
+            </form>
+            <div className="space-y-2">
+              {categories?.map((c: any) => (
+                <div key={c.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <span className="font-bold text-sm">{c.name}</span>
+                  <button onClick={() => deleteCategory(c.id)} className="text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                </div>
+              ))}
             </div>
+          </div>
 
-            {/* Category Input */}
-            <div className="flex-[1.5] flex items-center bg-slate-50 border border-slate-200 rounded-2xl px-4 py-1 focus-within:border-orange-500 focus-within:ring-4 focus-within:ring-orange-500/10 transition-all">
-              <Tag className="w-5 h-5 text-slate-400 mr-2" />
-              <input 
-                type="text" 
-                placeholder="Category" 
-                className="w-full bg-transparent p-2 outline-none font-medium text-slate-900 placeholder:text-slate-400"
-                value={category} onChange={(e) => setCategory(e.target.value)}
-              />
-            </div>
+          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 lg:col-span-2">
+            <h2 className="text-xl font-extrabold flex items-center gap-2 mb-6"><UtensilsCrossed className="text-orange-500 w-5 h-5" /> Add Menu Item</h2>
+            <form onSubmit={handleAddItem} className="space-y-4">
+              <div className="flex gap-4 flex-col md:flex-row">
+                <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-1">
+                  <input type="text" placeholder="Item Name" className="w-full bg-transparent p-2 outline-none font-medium" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-1">
+                  <DollarSign className="w-4 h-4 text-slate-400" />
+                  <input type="number" step="0.01" placeholder="Price" className="w-full bg-transparent p-2 outline-none font-medium" value={price} onChange={(e) => setPrice(e.target.value)} />
+                </div>
+              </div>
 
-            {/* Price Input */}
-            <div className="flex-[1] flex items-center bg-slate-50 border border-slate-200 rounded-2xl px-4 py-1 focus-within:border-orange-500 focus-within:ring-4 focus-within:ring-orange-500/10 transition-all">
-              <DollarSign className="w-5 h-5 text-slate-400 mr-1" />
-              <input 
-                type="number" 
-                step="0.01"
-                placeholder="0.00" 
-                className="w-full bg-transparent p-2 outline-none font-medium text-slate-900 placeholder:text-slate-400"
-                value={price} onChange={(e) => setPrice(e.target.value)}
-              />
-            </div>
+              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-1">
+                <select className="w-full bg-transparent p-2 outline-none font-medium text-slate-700" value={category} onChange={(e) => setCategory(e.target.value)}>
+                  <option value="" disabled>Select a Category...</option>
+                  {categories?.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
 
-            <button 
-              type="submit" 
-              className="bg-slate-900 text-white px-8 py-4 md:py-0 rounded-2xl font-bold hover:bg-slate-800 active:scale-95 transition-all shadow-lg shadow-slate-900/20 [Webkit-tap-highlight-color:transparent]"
-            >
-              Save Item
-            </button>
-          </form>
+              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-1">
+                <ImageIcon className="w-4 h-4 text-slate-400 mr-2" />
+                <input type="text" placeholder="Image URL (Optional)" className="w-full bg-transparent p-2 outline-none font-medium text-sm" value={image} onChange={(e) => setImage(e.target.value)} />
+              </div>
+
+              <div className="flex items-start bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                <AlignLeft className="w-4 h-4 text-slate-400 mr-2 mt-2" />
+                <textarea placeholder="Description / Ingredients (Optional)" rows={2} className="w-full bg-transparent p-1 outline-none font-medium text-sm resize-none" value={description} onChange={(e) => setDescription(e.target.value)} />
+              </div>
+
+              {/* ADD-ONS SECTION */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <p className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2"><Layers className="w-4 h-4"/> Add-ons & Extras (Optional)</p>
+                <div className="space-y-2 mb-3">
+                  {addons.map((addon, i) => (
+                    <div key={i} className="flex justify-between items-center bg-white border border-slate-200 p-2 rounded-lg text-sm font-medium">
+                      <span>{addon.name} <span className="text-orange-500 font-bold ml-2">+${Number(addon.price).toFixed(2)}</span></span>
+                      <button type="button" onClick={() => removeAddon(i)} className="text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input type="text" placeholder="e.g. Extra Cheese" className="flex-[2] bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none text-sm" value={addonName} onChange={(e) => setAddonName(e.target.value)} />
+                  <input type="number" step="0.01" placeholder="Price (0 if free)" className="flex-[1] bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none text-sm" value={addonPrice} onChange={(e) => setAddonPrice(e.target.value)} />
+                  <button type="button" onClick={handleAddAddon} className="bg-slate-200 text-slate-700 px-3 rounded-lg font-bold hover:bg-slate-300 text-sm">Add</button>
+                </div>
+              </div>
+
+              <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-slate-800 transition-all">Save Menu Item</button>
+            </form>
+          </div>
         </div>
 
-        {/* --- MENU LIST CARD --- */}
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_2px_20px_rgb(0,0,0,0.02)] border border-slate-100">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-            <h2 className="text-xl font-extrabold flex items-center gap-2 text-slate-900">
-              <UtensilsCrossed className="text-blue-500 w-6 h-6" /> Current Menu
-            </h2>
-            
-            {/* Search Bar */}
-            <div className="w-full md:w-64 flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-1 focus-within:border-blue-500 transition-all">
-              <Search className="w-4 h-4 text-slate-400 mr-2" />
-              <input 
-                type="text" 
-                placeholder="Search menu..." 
-                className="w-full bg-transparent p-1.5 outline-none text-sm font-medium text-slate-900 placeholder:text-slate-400"
-                value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {!menuItems && (
-              <div className="text-center py-10 text-slate-400 font-medium animate-pulse">Loading menu items...</div>
-            )}
-            
-            {filteredItems.length === 0 && menuItems && (
-              <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                <UtensilsCrossed className="w-8 h-8 mx-auto mb-3 text-slate-300" />
-                <p className="font-medium text-lg">No items found</p>
-                <p className="text-sm">Try adjusting your search or add a new item above.</p>
-              </div>
-            )}
-
-            {filteredItems.map((item: any) => (
-              <div 
-                key={item.id} 
-                className={`p-4 bg-white rounded-2xl border transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-md ${
-                  item.isSoldOut ? 'border-rose-100 bg-rose-50/30' : 'border-slate-100'
-                }`}
-              >
-                <div>
-                  <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2">
-                    {item.name}
-                    {item.isSoldOut && (
-                      <span className="text-[10px] bg-rose-100 text-rose-600 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">
-                        Sold Out
-                      </span>
-                    )}
-                  </h3>
-                  <div className="flex items-center gap-3 text-sm mt-1">
-                    <span className="text-slate-500 font-medium flex items-center gap-1">
-                      <Tag className="w-3 h-3" /> {item.category}
-                    </span>
-                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                    <span className="font-extrabold text-slate-900">
-                      ${item.price.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="flex w-full md:w-auto gap-2">
-                  <button 
-                    onClick={() => toggleSoldOut(item)}
-                    className={`flex-1 md:flex-none px-4 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 [Webkit-tap-highlight-color:transparent] ${
-                      item.isSoldOut 
-                        ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100' 
-                        : 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100'
-                    }`}
-                  >
-                    {item.isSoldOut ? <><Eye className="w-4 h-4"/> Mark Available</> : <><EyeOff className="w-4 h-4"/> Mark Sold Out</>}
-                  </button>
-                  
-                  <button 
-                    onClick={() => deleteItem(item.id, item.name)}
-                    className="w-12 h-10 md:w-auto md:h-auto md:px-4 md:py-2.5 bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500 border border-slate-200 hover:border-red-200 rounded-xl flex items-center justify-center transition-all active:scale-95 [Webkit-tap-highlight-color:transparent]"
-                    title="Delete Item"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+        {/* MENU LIST */}
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+           <div className="flex justify-between items-center mb-6">
+             <h2 className="text-xl font-extrabold">Current Menu</h2>
+             <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-1">
+                <Search className="w-4 h-4 text-slate-400 mr-2" />
+                <input type="text" placeholder="Search..." className="bg-transparent p-1.5 outline-none text-sm font-medium" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+             </div>
+           </div>
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             {filteredItems.map((item: any) => (
+               <div key={item.id} className={`p-4 rounded-2xl border flex gap-4 ${item.isSoldOut ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-100'}`}>
+                 {item.image && <img src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded-xl border border-slate-200 flex-shrink-0" />}
+                 <div className="flex-1">
+                   <div className="flex justify-between items-start">
+                     <h3 className="font-extrabold text-lg leading-tight">{item.name}</h3>
+                     <span className="font-extrabold">${Number(item.price || 0).toFixed(2)}</span>
+                   </div>
+                   <p className="text-xs text-slate-500 font-bold mb-1">{item.category}</p>
+                   {item.description && <p className="text-xs text-slate-600 line-clamp-2 mb-2">{item.description}</p>}
+                   
+                   {/* Display Addons */}
+                   {item.addons?.length > 0 && (
+                     <div className="mb-3 flex flex-wrap gap-1">
+                       {item.addons.map((a: any, i: number) => (
+                         <span key={i} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded-md font-bold border border-slate-200">
+                           {a.name} (+${Number(a.price).toFixed(2)})
+                         </span>
+                       ))}
+                     </div>
+                   )}
+                   
+                   <div className="flex gap-2 mt-auto pt-2">
+                     <button onClick={() => toggleSoldOut(item)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200">{item.isSoldOut ? 'Mark Available' : 'Mark Sold Out'}</button>
+                     <button onClick={() => deleteItem(item.id)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100">Delete</button>
+                   </div>
+                 </div>
+               </div>
+             ))}
+           </div>
         </div>
       </div>
     </div>

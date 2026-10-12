@@ -7,9 +7,9 @@ import PusherClient from 'pusher-js';
 import { 
   LayoutDashboard, UtensilsCrossed, ChefHat, CheckCircle2, 
   Trash2, Plus, Users, Clock, CreditCard, ChevronRight, 
-  AlertCircle, RefreshCcw, Banknote, Bell 
+  AlertCircle, RefreshCcw, Banknote, Bell, 
 } from 'lucide-react';
-
+import Link from 'next/link';
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function AdminDashboard() {
@@ -113,12 +113,12 @@ export default function AdminDashboard() {
             </h1>
             <p className="text-slate-500 font-medium mt-2 ml-15">Manage your orders and dining room in real-time.</p>
           </div>
-          <a 
-            href="/admin/menu" 
+          <Link 
+            href={{ pathname: '/admin/menu' }}
             className="mt-6 md:mt-0 flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3.5 rounded-2xl font-bold transition-all active:scale-95 [Webkit-tap-highlight-color:transparent]"
           >
             <UtensilsCrossed className="w-5 h-5"/> Manage Menu Items <ChevronRight className="w-4 h-4 text-slate-400"/>
-          </a>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">

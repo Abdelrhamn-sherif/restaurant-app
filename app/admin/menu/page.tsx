@@ -3,7 +3,7 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import toast, { Toaster } from 'react-hot-toast';
 import { ChevronLeft, UtensilsCrossed, PlusCircle, Trash2, Tag, DollarSign, Search, ImageIcon, AlignLeft, Layers } from 'lucide-react';
-
+import Link from 'next/link';
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function AdminMenu() {
@@ -84,9 +84,9 @@ export default function AdminMenu() {
       <div className="max-w-5xl mx-auto space-y-8">
         
         <div className="flex items-center gap-4">
-          <a href="/admin" className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-slate-100 hover:bg-slate-100 transition-all active:scale-95">
+          <Link href="/admin" className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-slate-100 hover:bg-slate-100 transition-all active:scale-95">
             <ChevronLeft className="w-6 h-6 text-slate-600" />
-          </a>
+          </Link>
           <div>
             <h1 className="text-3xl font-extrabold text-slate-900">Manage Menu</h1>
             <p className="text-slate-500 font-medium">Add dishes, categories, and add-ons.</p>

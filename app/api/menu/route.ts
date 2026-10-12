@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     price: parseFloat(body.price),
     description: body.description || '',
     image: body.image || '',
-    addons: body.addons || [], // NEW: Save add-ons array
+    addons: body.addons || [],
     isSoldOut: false
   };
   
@@ -30,16 +30,31 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   const { id, isSoldOut } = await request.json();
+  
+  // TypeScript Fix: Validate JSON payload ID
+  if (!id) {
+    return NextResponse.json({ error: 'ID required' }, { status: 400 });
+  }
+
   const client = await clientPromise;
   const db = client.db('restaurant_app');
   
-  await db.collection('menu').updateOne({ _id: new ObjectId(id) }, { $set: { isSoldOut } });
+  await db.collection('menu').updateOne(
+    { _id: new ObjectId(id as string) }, 
+    { $set: { isSoldOut } }
+  );
   return NextResponse.json({ success: true });
 }
 
 export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
+  
+  // TypeScript Fix: Ensure ID exists before calling MongoDB
+  if (!id) {
+    return NextResponse.json({ error: 'ID required' }, { status: 400 });
+  }
+
   const client = await clientPromise;
   const db = client.db('restaurant_app');
   
